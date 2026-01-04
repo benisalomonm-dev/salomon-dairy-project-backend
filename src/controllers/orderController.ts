@@ -1,9 +1,8 @@
 import { Response } from 'express';
-import { Op } from 'sequelize';
-import Order from '../models/Order';
-import Client from '../models/Client';
-import Product from '../models/Product';
-import { User } from '../models/User';
+import Order from '../models/Order.mongo';
+import Client from '../models/Client.mongo';
+import Product from '../models/Product.mongo';
+import User from '../models/User.mongo';
 import { AuthRequest } from '../middleware/auth';
 import emailService from '../services/emailService';
 

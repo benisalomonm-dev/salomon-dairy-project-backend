@@ -1,6 +1,5 @@
 import { Response } from 'express';
-import { Op } from 'sequelize';
-import Product from '../models/Product';
+import Product from '../models/Product.mongo';
 import { AuthRequest } from '../middleware/auth';
 
 // @desc    Get all products

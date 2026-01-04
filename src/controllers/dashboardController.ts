@@ -1,10 +1,9 @@
 import { Response } from 'express';
-import { Op, fn, col } from 'sequelize';
-import Order from '../models/Order';
-import Product from '../models/Product';
-import Client from '../models/Client';
-import Batch from '../models/Batch';
-import Invoice from '../models/Invoice';
+import Order from '../models/Order.mongo';
+import Product from '../models/Product.mongo';
+import Client from '../models/Client.mongo';
+import Batch from '../models/Batch.mongo';
+import Invoice from '../models/Invoice.mongo';
 import { AuthRequest } from '../middleware/auth';
 
 // @desc    Get dashboard statistics

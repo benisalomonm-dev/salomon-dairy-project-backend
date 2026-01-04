@@ -1,6 +1,5 @@
 import { Response } from 'express';
-import { Op } from 'sequelize';
-import Client from '../models/Client';
+import Client from '../models/Client.mongo';
 import { AuthRequest } from '../middleware/auth';
 
 // @desc    Get all clients

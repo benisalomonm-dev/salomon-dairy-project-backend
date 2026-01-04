@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
-import { Op } from 'sequelize';
-import { User } from '../models/User';
+import User from '../models/User.mongo';
 import { AuthRequest } from '../middleware/auth';
 import emailService from '../services/emailService';
 

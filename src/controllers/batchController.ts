@@ -1,8 +1,7 @@
 import { Response } from 'express';
-import { Op } from 'sequelize';
-import Batch from '../models/Batch';
-import Product from '../models/Product';
-import { User } from '../models/User';
+import Batch from '../models/Batch.mongo';
+import Product from '../models/Product.mongo';
+import User from '../models/User.mongo';
 import { AuthRequest } from '../middleware/auth';
 
 // @desc    Get all batches

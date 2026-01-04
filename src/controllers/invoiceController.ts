@@ -1,9 +1,8 @@
 import { Response } from 'express';
-import { Op } from 'sequelize';
-import Invoice from '../models/Invoice';
-import Order from '../models/Order';
-import Client from '../models/Client';
-import { User } from '../models/User';
+import Invoice from '../models/Invoice.mongo';
+import Order from '../models/Order.mongo';
+import Client from '../models/Client.mongo';
+import User from '../models/User.mongo';
 import { AuthRequest } from '../middleware/auth';
 
 // @desc    Get all invoices
