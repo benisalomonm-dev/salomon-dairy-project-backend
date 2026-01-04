@@ -8,10 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "postinstall": "npm run build",
-    "db:init": "ts-node src/scripts/initDatabase.ts",
-    "db:seed": "ts-node src/scripts/seed.ts",
-    "db:reset": "npm run db:init && npm run db:seed",
-    "seed": "ts-node src/scripts/seed.ts",
+    "db:seed": "ts-node src/scripts/seed.mongo.ts",
+    "seed": "ts-node src/scripts/seed.mongo.ts",
     "test": "jest"
   },
   "keywords": [
