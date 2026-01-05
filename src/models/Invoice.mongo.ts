@@ -24,6 +24,9 @@ export interface IInvoice extends Document {
   paymentMethod?: string;
   notes?: string;
   createdBy: mongoose.Types.ObjectId;
+  issueDate?: Date;
+  termsAndConditions?: string;
+  paymentReference?: string;
 }
 
 const InvoiceSchema = new Schema<IInvoice>(
@@ -116,6 +119,18 @@ const InvoiceSchema = new Schema<IInvoice>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    issueDate: {
+      type: Date,
+      default: Date.now,
+    },
+    termsAndConditions: {
+      type: String,
+      trim: true,
+    },
+    paymentReference: {
+      type: String,
+      trim: true,
     },
   },
   {

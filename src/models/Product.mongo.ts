@@ -5,11 +5,14 @@ export interface IProduct extends Document {
   category: string;
   unit: string;
   price: number;
+  unitPrice: number; // Alias for price
   stock: number;
+  currentStock: number; // Alias for stock
   minStock: number;
   description?: string;
   isActive: boolean;
   sku?: string;
+  lastRestocked?: Date;
 }
 
 const ProductSchema = new Schema<IProduct>(
@@ -44,6 +47,9 @@ const ProductSchema = new Schema<IProduct>(
       default: 10,
       min: 0,
     },
+    lastRestocked: {
+      type: Date,
+    },
     description: {
       type: String,
       trim: true,
@@ -60,7 +66,23 @@ const ProductSchema = new Schema<IProduct>(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
+
+// Virtual for unitPrice (alias for price)
+ProductSchema.virtual('unitPrice').get(function() {
+  return this.price;
+});
+
+// Virtual for currentStock (alias for stock)
+ProductSchema.virtual('currentStock')
+  .get(function() {
+    return this.stock;
+  })
+  .set(function(value: number) {
+    this.stock = value;
+  });
 
 export default mongoose.model<IProduct>('Product', ProductSchema);

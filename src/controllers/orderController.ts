@@ -2,9 +2,8 @@ import { Response } from 'express';
 import Order from '../models/Order.mongo';
 import Client from '../models/Client.mongo';
 import Product from '../models/Product.mongo';
-import User from '../models/User.mongo';
 import { AuthRequest } from '../middleware/auth';
-import emailService from '../services/emailService';
+// import emailService from '../services/emailService';
 
 // @desc    Get all orders
 // @route   GET /api/v1/orders
@@ -13,35 +12,31 @@ export const getOrders = async (req: AuthRequest, res: Response): Promise<void> 
   try {
     const { status, clientId, startDate, endDate } = req.query;
     
-    const where: any = {};
+    const query: any = {};
     
     if (status) {
-      where.status = status;
+      query.status = status;
     }
     
     if (clientId) {
-      where.clientId = clientId;
+      query.clientId = clientId;
     }
     
     if (startDate || endDate) {
-      where.deliveryDate = {};
+      query.deliveryDate = {};
       if (startDate) {
-        where.deliveryDate[Op.gte] = new Date(startDate as string);
+        query.deliveryDate.$gte = new Date(startDate as string);
       }
       if (endDate) {
-        where.deliveryDate[Op.lte] = new Date(endDate as string);
+        query.deliveryDate.$lte = new Date(endDate as string);
       }
     }
 
-    const orders = await Order.findAll({
-      where,
-      include: [
-        { model: Client, as: 'client', attributes: ['name', 'type'] },
-        { model: User, as: 'driver', attributes: ['name'] },
-        { model: User, as: 'creator', attributes: ['name'] }
-      ],
-      order: [['createdAt', 'DESC']],
-    });
+    const orders = await Order.find(query)
+      .populate('clientId', 'name type')
+      .populate('driverId', 'name')
+      .populate('createdBy', 'name')
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -61,13 +56,10 @@ export const getOrders = async (req: AuthRequest, res: Response): Promise<void> 
 // @access  Private
 export const getOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const order = await Order.findByPk(req.params.id, {
-      include: [
-        { model: Client, as: 'client' },
-        { model: User, as: 'driver', attributes: ['name'] },
-        { model: User, as: 'creator', attributes: ['name'] }
-      ],
-    });
+    const order = await Order.findById(req.params.id)
+      .populate('clientId')
+      .populate('driverId', 'name')
+      .populate('createdBy', 'name');
 
     if (!order) {
       res.status(404).json({
@@ -94,10 +86,10 @@ export const getOrder = async (req: AuthRequest, res: Response): Promise<void> =
 // @access  Private (Admin, Manager)
 export const createOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { clientId, items, deliveryAddress, deliveryDate, deliveryTime, specialInstructions } = req.body;
+    const { clientId, items, deliveryAddress, deliveryDate, specialInstructions } = req.body;
 
     // Verify client exists
-    const client = await Client.findByPk(clientId);
+    const client = await Client.findById(clientId);
     if (!client) {
       res.status(404).json({
         success: false,
@@ -111,7 +103,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
     const orderItems = [];
 
     for (const item of items) {
-      const product = await Product.findByPk(item.productId);
+      const product = await Product.findById(item.productId);
       
       if (!product) {
         res.status(404).json({
@@ -133,7 +125,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
       subtotal += itemTotal;
 
       orderItems.push({
-        productId: product.id,
+        productId: product._id,
         productName: product.name,
         quantity: item.quantity,
         unit: product.unit,
@@ -156,7 +148,6 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
       total,
       deliveryAddress,
       deliveryDate,
-      deliveryTime,
       specialInstructions,
       createdBy: req.user?.id,
       tracking: {
@@ -172,7 +163,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
 
     // Update product stocks
     for (const item of orderItems) {
-      const product = await Product.findByPk(item.productId);
+      const product = await Product.findById(item.productId);
       if (product) {
         product.currentStock -= item.quantity;
         await product.save();
@@ -190,13 +181,13 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
     await client.save();
 
     // Send order confirmation email
-    if (client.email) {
-      await emailService.sendOrderConfirmationEmail(
-        order,
-        client.email,
-        client.name
-      );
-    }
+    // if (client.email) {
+    //   await emailService.sendOrderConfirmationEmail(
+    //     order,
+    //     client.email,
+    //     client.name
+    //   );
+    // }
 
     res.status(201).json({
       success: true,
@@ -215,7 +206,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
 // @access  Private (Admin, Manager)
 export const updateOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const order = await Order.findByPk(req.params.id);
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
       res.status(404).json({
@@ -225,7 +216,8 @@ export const updateOrder = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    await order.update(req.body);
+    Object.assign(order, req.body);
+    await order.save();
 
     res.status(200).json({
       success: true,
@@ -246,7 +238,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
   try {
     const { status, note, location } = req.body;
 
-    const order = await Order.findByPk(req.params.id);
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
       res.status(404).json({
@@ -299,7 +291,7 @@ export const assignDriver = async (req: AuthRequest, res: Response): Promise<voi
   try {
     const { driverId, driverName } = req.body;
 
-    const order = await Order.findByPk(req.params.id);
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
       res.status(404).json({
@@ -330,7 +322,7 @@ export const assignDriver = async (req: AuthRequest, res: Response): Promise<voi
 // @access  Private (Admin, Manager)
 export const cancelOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const order = await Order.findByPk(req.params.id);
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
       res.status(404).json({
@@ -374,7 +366,7 @@ export const cancelOrder = async (req: AuthRequest, res: Response): Promise<void
     // Restore product stocks
     const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
     for (const item of items) {
-      const product = await Product.findByPk(item.productId);
+      const product = await Product.findById(item.productId);
       if (product) {
         product.currentStock += item.quantity;
         await product.save();

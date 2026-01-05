@@ -9,6 +9,8 @@ export interface IBatch extends Document {
   expiryDate?: Date;
   status: 'active' | 'expired' | 'recalled';
   notes?: string;
+  yield?: number;
+  qualityChecks?: any;
 }
 
 const BatchSchema = new Schema<IBatch>(
@@ -48,6 +50,16 @@ const BatchSchema = new Schema<IBatch>(
     notes: {
       type: String,
       trim: true,
+    },
+    yield: {
+      type: Number,
+      default: 100,
+      min: 0,
+      max: 100,
+    },
+    qualityChecks: {
+      type: Schema.Types.Mixed,
+      default: {},
     },
   },
   {

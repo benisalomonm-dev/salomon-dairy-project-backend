@@ -11,6 +11,11 @@ export interface IClient extends Document {
   balance: number;
   isActive: boolean;
   notes?: string;
+  totalOrders?: number;
+  totalRevenue?: number;
+  monthlyRevenue?: number;
+  lastOrderDate?: Date;
+  rating?: number;
 }
 
 const ClientSchema = new Schema<IClient>(
@@ -58,6 +63,26 @@ const ClientSchema = new Schema<IClient>(
     notes: {
       type: String,
       trim: true,
+    },
+    totalOrders: {
+      type: Number,
+      default: 0,
+    },
+    totalRevenue: {
+      type: Number,
+      default: 0,
+    },
+    monthlyRevenue: {
+      type: Number,
+      default: 0,
+    },
+    lastOrderDate: {
+      type: Date,
+    },
+    rating: {
+      type: Number,
+      min: 0,
+      max: 5,
     },
   },
   {

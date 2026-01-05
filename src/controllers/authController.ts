@@ -6,7 +6,7 @@ import { AuthRequest } from '../middleware/auth';
 import emailService from '../services/emailService';
 
 // Generate JWT Token
-const generateToken = (id: number): string => {
+const generateToken = (id: string): string => {
   const secret = process.env.JWT_SECRET || 'secret';
   const expiresIn = process.env.JWT_EXPIRE || '7d';
   return jwt.sign({ id }, secret, { expiresIn } as SignOptions);
@@ -20,7 +20,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const { name, email, password, role } = req.body;
 
     // Check if user exists
-    const userExists = await User.findOne({ where: { email } });
+    const userExists = await User.findOne({ email });
     if (userExists) {
       res.status(400).json({
         success: false,
@@ -38,7 +38,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     });
 
     // Generate token
-    const token = generateToken(user.id);
+    const token = generateToken(user._id.toString());
 
     res.status(201).json({
       success: true,
@@ -75,7 +75,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Check for user (password is included by default in Sequelize)
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
       res.status(401).json({
@@ -97,7 +97,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Check if user is active
-    if (user.status !== 'active') {
+    if (!user.isActive) {
       res.status(401).json({
         success: false,
         message: 'Your account is inactive. Please contact administrator.',
@@ -110,7 +110,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     await user.save();
 
     // Generate token
-    const token = generateToken(user.id);
+    const token = generateToken(user._id.toString());
 
     res.status(200).json({
       success: true,
@@ -230,12 +230,8 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       .digest('hex');
 
     const user = await User.findOne({
-      where: {
-        resetPasswordToken,
-        resetPasswordExpire: {
-          [Op.gt]: new Date()
-        }
-      }
+      resetPasswordToken,
+      resetPasswordExpire: { $gt: new Date() }
     });
 
     if (!user) {
@@ -253,7 +249,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     await user.save();
 
     // Generate token
-    const token = generateToken(user.id);
+    const token = generateToken(user._id.toString());
 
     res.status(200).json({
       success: true,
@@ -276,7 +272,7 @@ export const updatePassword = async (
   res: Response
 ): Promise<void> => {
   try {
-    const user = await User.findByPk(req.user?.id);
+    const user = await User.findById(req.user?.id).select('+password');
 
     if (!user) {
       res.status(404).json({

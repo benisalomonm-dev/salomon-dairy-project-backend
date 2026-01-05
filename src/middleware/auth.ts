@@ -34,9 +34,7 @@ export const protect = async (
         id: string;
       };
 
-      const user = await User.findByPk(decoded.id, {
-        attributes: { exclude: ['password'] }
-      });
+      const user = await User.findById(decoded.id).select('-password');
       
       if (!user) {
         res.status(401).json({
@@ -46,7 +44,7 @@ export const protect = async (
         return;
       }
 
-      if (user.status !== 'active') {
+      if (!user.isActive) {
         res.status(401).json({
           success: false,
           message: 'User account is inactive',

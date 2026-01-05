@@ -13,12 +13,19 @@ export interface IOrder extends Document {
   clientId: mongoose.Types.ObjectId;
   clientName: string;
   items: IOrderItem[];
+  subtotal: number;
+  tax: number;
+  discount: number;
   total: number;
   status: 'pending' | 'processing' | 'delivered' | 'cancelled';
   deliveryDate?: Date;
   deliveryAddress?: string;
   notes?: string;
+  specialInstructions?: string;
   createdBy: mongoose.Types.ObjectId;
+  tracking?: any;
+  driverId?: mongoose.Types.ObjectId;
+  driverName?: string;
 }
 
 const OrderSchema = new Schema<IOrder>(
@@ -63,6 +70,21 @@ const OrderSchema = new Schema<IOrder>(
         min: 0,
       },
     }],
+    subtotal: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    tax: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    discount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     total: {
       type: Number,
       required: true,
@@ -84,10 +106,26 @@ const OrderSchema = new Schema<IOrder>(
       type: String,
       trim: true,
     },
+    specialInstructions: {
+      type: String,
+      trim: true,
+    },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    tracking: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+    driverId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    driverName: {
+      type: String,
+      trim: true,
     },
   },
   {

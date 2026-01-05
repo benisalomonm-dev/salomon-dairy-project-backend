@@ -2,7 +2,6 @@ import { Response } from 'express';
 import Invoice from '../models/Invoice.mongo';
 import Order from '../models/Order.mongo';
 import Client from '../models/Client.mongo';
-import User from '../models/User.mongo';
 import { AuthRequest } from '../middleware/auth';
 
 // @desc    Get all invoices
@@ -12,34 +11,30 @@ export const getInvoices = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { status, clientId, startDate, endDate } = req.query;
     
-    let where: any = {};
+    let query: any = {};
     
     if (status) {
-      where.status = status;
+      query.status = status;
     }
     
     if (clientId) {
-      where.clientId = clientId;
+      query.clientId = clientId;
     }
     
     if (startDate || endDate) {
-      where.issueDate = {};
+      query.issueDate = {};
       if (startDate) {
-        where.issueDate[Op.gte] = new Date(startDate as string);
+        query.issueDate.$gte = new Date(startDate as string);
       }
       if (endDate) {
-        where.issueDate[Op.lte] = new Date(endDate as string);
+        query.issueDate.$lte = new Date(endDate as string);
       }
     }
 
-    const invoices = await Invoice.findAll({
-      where,
-      include: [
-        { model: Client, as: 'client', attributes: ['id', 'name', 'type', 'email'] },
-        { model: Order, as: 'order' },
-      ],
-      order: [['createdAt', 'DESC']],
-    });
+    const invoices = await Invoice.find(query)
+      .populate('clientId', 'name type email')
+      .populate('orderId')
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -59,13 +54,10 @@ export const getInvoices = async (req: AuthRequest, res: Response): Promise<void
 // @access  Private
 export const getInvoice = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const invoice = await Invoice.findByPk(req.params.id, {
-      include: [
-        { model: Client, as: 'client' },
-        { model: Order, as: 'order' },
-        { model: User, as: 'creator', attributes: ['id', 'name'] },
-      ],
-    });
+    const invoice = await Invoice.findById(req.params.id)
+      .populate('clientId')
+      .populate('orderId')
+      .populate('createdBy', 'name');
 
     if (!invoice) {
       res.status(404).json({
@@ -92,9 +84,8 @@ export const getInvoice = async (req: AuthRequest, res: Response): Promise<void>
 // @access  Private (Admin, Manager)
 export const createInvoiceFromOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const order = await Order.findByPk(req.params.orderId, {
-      include: [{ model: Client, as: 'client' }],
-    });
+    const order = await Order.findById(req.params.orderId)
+      .populate('clientId');
 
     if (!order) {
       res.status(404).json({
@@ -116,7 +107,7 @@ export const createInvoiceFromOrder = async (req: AuthRequest, res: Response): P
     dueDate.setDate(dueDate.getDate() + paymentTerms);
 
     const invoice = await Invoice.create({
-      orderId: order.id,
+      orderId: order._id,
       clientId: order.clientId,
       clientName: order.clientName,
       items,
@@ -148,7 +139,7 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { clientId, items, dueDate, discount, termsAndConditions, notes } = req.body;
 
-    const client = await Client.findByPk(clientId);
+    const client = await Client.findById(clientId);
     if (!client) {
       res.status(404).json({
         success: false,
@@ -197,7 +188,7 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
 // @access  Private (Admin, Manager)
 export const updateInvoice = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const invoice = await Invoice.findByPk(req.params.id);
+    const invoice = await Invoice.findById(req.params.id);
 
     if (!invoice) {
       res.status(404).json({
@@ -207,7 +198,8 @@ export const updateInvoice = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    await invoice.update(req.body);
+    Object.assign(invoice, req.body);
+    await invoice.save();
 
     res.status(200).json({
       success: true,
@@ -228,7 +220,7 @@ export const markInvoiceAsPaid = async (req: AuthRequest, res: Response): Promis
   try {
     const { paymentMethod, paymentReference } = req.body;
 
-    const invoice = await Invoice.findByPk(req.params.id);
+    const invoice = await Invoice.findById(req.params.id);
 
     if (!invoice) {
       res.status(404).json({
@@ -262,7 +254,7 @@ export const markInvoiceAsPaid = async (req: AuthRequest, res: Response): Promis
 // @access  Private (Admin)
 export const deleteInvoice = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const invoice = await Invoice.findByPk(req.params.id);
+    const invoice = await Invoice.findById(req.params.id);
 
     if (!invoice) {
       res.status(404).json({
@@ -272,7 +264,7 @@ export const deleteInvoice = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    await invoice.destroy();
+    await invoice.deleteOne();
 
     res.status(200).json({
       success: true,
@@ -291,42 +283,36 @@ export const deleteInvoice = async (req: AuthRequest, res: Response): Promise<vo
 // @access  Private
 export const getFinancialSummary = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { fn, col } = require('sequelize');
-    
     // Total revenue
-    const totalRevenueResult = await Invoice.findOne({
-      attributes: [[fn('SUM', col('total')), 'total']],
-      raw: true,
-    });
+    const totalRevenueResult = await Invoice.aggregate([
+      { $group: { _id: null, total: { $sum: '$total' } } }
+    ]);
 
     // Paid invoices
-    const paidResult = await Invoice.findOne({
-      where: { status: 'paid' },
-      attributes: [[fn('SUM', col('total')), 'total']],
-      raw: true,
-    });
+    const paidResult = await Invoice.aggregate([
+      { $match: { status: 'paid' } },
+      { $group: { _id: null, total: { $sum: '$total' } } }
+    ]);
 
     // Pending invoices (sent or draft)
-    const pendingResult = await Invoice.findOne({
-      where: { status: { [Op.in]: ['sent', 'draft'] } },
-      attributes: [[fn('SUM', col('total')), 'total']],
-      raw: true,
-    });
+    const pendingResult = await Invoice.aggregate([
+      { $match: { status: { $in: ['sent', 'draft'] } } },
+      { $group: { _id: null, total: { $sum: '$total' } } }
+    ]);
 
     // Overdue invoices
-    const overdueResult = await Invoice.findOne({
-      where: { status: 'overdue' },
-      attributes: [[fn('SUM', col('total')), 'total']],
-      raw: true,
-    });
+    const overdueResult = await Invoice.aggregate([
+      { $match: { status: 'overdue' } },
+      { $group: { _id: null, total: { $sum: '$total' } } }
+    ]);
 
     res.status(200).json({
       success: true,
       data: {
-        totalRevenue: (totalRevenueResult as any)?.total || 0,
-        collected: (paidResult as any)?.total || 0,
-        pending: (pendingResult as any)?.total || 0,
-        overdue: (overdueResult as any)?.total || 0,
+        totalRevenue: totalRevenueResult[0]?.total || 0,
+        collected: paidResult[0]?.total || 0,
+        pending: pendingResult[0]?.total || 0,
+        overdue: overdueResult[0]?.total || 0,
       },
     });
   } catch (error: any) {

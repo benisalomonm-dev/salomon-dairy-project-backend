@@ -9,28 +9,26 @@ export const getClients = async (req: AuthRequest, res: Response): Promise<void>
   try {
     const { type, status, search } = req.query;
     
-    let where: any = {};
+    let query: any = {};
     
     if (type) {
-      where.type = type;
+      query.type = type;
     }
     
     if (status) {
-      where.status = status;
+      query.status = status;
     }
     
     if (search) {
-      where[Op.or] = [
-        { name: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } },
-        { phone: { [Op.like]: `%${search}%` } },
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
       ];
     }
 
-    const clients = await Client.findAll({
-      where,
-      order: [['createdAt', 'DESC']],
-    });
+    const clients = await Client.find(query)
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -50,7 +48,7 @@ export const getClients = async (req: AuthRequest, res: Response): Promise<void>
 // @access  Private
 export const getClient = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const client = await Client.findByPk(req.params.id);
+    const client = await Client.findById(req.params.id);
 
     if (!client) {
       res.status(404).json({
@@ -96,7 +94,7 @@ export const createClient = async (req: AuthRequest, res: Response): Promise<voi
 // @access  Private (Admin, Manager)
 export const updateClient = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const client = await Client.findByPk(req.params.id);
+    const client = await Client.findById(req.params.id);
 
     if (!client) {
       res.status(404).json({
@@ -106,7 +104,8 @@ export const updateClient = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    await client.update(req.body);
+    Object.assign(client, req.body);
+    await client.save();
 
     res.status(200).json({
       success: true,
@@ -125,7 +124,7 @@ export const updateClient = async (req: AuthRequest, res: Response): Promise<voi
 // @access  Private (Admin)
 export const deleteClient = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const client = await Client.findByPk(req.params.id);
+    const client = await Client.findById(req.params.id);
 
     if (!client) {
       res.status(404).json({
@@ -135,7 +134,7 @@ export const deleteClient = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    await client.destroy();
+    await client.deleteOne();
 
     res.status(200).json({
       success: true,
@@ -154,7 +153,7 @@ export const deleteClient = async (req: AuthRequest, res: Response): Promise<voi
 // @access  Private
 export const getClientStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const client = await Client.findByPk(req.params.id);
+    const client = await Client.findById(req.params.id);
 
     if (!client) {
       res.status(404).json({

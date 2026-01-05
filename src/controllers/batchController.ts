@@ -1,7 +1,6 @@
 import { Response } from 'express';
 import Batch from '../models/Batch.mongo';
 import Product from '../models/Product.mongo';
-import User from '../models/User.mongo';
 import { AuthRequest } from '../middleware/auth';
 
 // @desc    Get all batches
@@ -11,34 +10,30 @@ export const getBatches = async (req: AuthRequest, res: Response): Promise<void>
   try {
     const { status, productType, startDate, endDate } = req.query;
     
-    let where: any = {};
+    let query: any = {};
     
     if (status) {
-      where.status = status;
+      query.status = status;
     }
     
     if (productType) {
-      where.productType = productType;
+      query.productType = productType;
     }
     
     if (startDate || endDate) {
-      where.startTime = {};
+      query.startTime = {};
       if (startDate) {
-        where.startTime[Op.gte] = new Date(startDate as string);
+        query.startTime.$gte = new Date(startDate as string);
       }
       if (endDate) {
-        where.startTime[Op.lte] = new Date(endDate as string);
+        query.startTime.$lte = new Date(endDate as string);
       }
     }
 
-    const batches = await Batch.findAll({
-      where,
-      include: [
-        { model: User, as: 'operatorRef', attributes: ['id', 'name'] },
-        { model: Product, as: 'productRef', attributes: ['id', 'name'] },
-      ],
-      order: [['createdAt', 'DESC']],
-    });
+    const batches = await Batch.find(query)
+      .populate('operatorId', 'name')
+      .populate('productId', 'name')
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -58,12 +53,9 @@ export const getBatches = async (req: AuthRequest, res: Response): Promise<void>
 // @access  Private
 export const getBatch = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const batch = await Batch.findByPk(req.params.id, {
-      include: [
-        { model: User, as: 'operator' },
-        { model: Product, as: 'product' },
-      ],
-    });
+    const batch = await Batch.findById(req.params.id)
+      .populate('operatorId')
+      .populate('productId');
 
     if (!batch) {
       res.status(404).json({
@@ -117,7 +109,7 @@ export const createBatch = async (req: AuthRequest, res: Response): Promise<void
 // @access  Private (Admin, Manager, Operator)
 export const updateBatch = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const batch = await Batch.findByPk(req.params.id);
+    const batch = await Batch.findById(req.params.id);
 
     if (!batch) {
       res.status(404).json({
@@ -127,7 +119,8 @@ export const updateBatch = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    await batch.update(req.body);
+    Object.assign(batch, req.body);
+    await batch.save();
 
     res.status(200).json({
       success: true,
@@ -148,7 +141,7 @@ export const completeBatch = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { yield: batchYield, qualityChecks } = req.body;
 
-    const batch = await Batch.findByPk(req.params.id);
+    const batch = await Batch.findById(req.params.id);
 
     if (!batch) {
       res.status(404).json({
@@ -157,9 +150,6 @@ export const completeBatch = async (req: AuthRequest, res: Response): Promise<vo
       });
       return;
     }
-
-    batch.status = 'completed';
-    batch.endTime = new Date();
     
     if (batchYield) {
       batch.yield = batchYield;
@@ -174,7 +164,7 @@ export const completeBatch = async (req: AuthRequest, res: Response): Promise<vo
     // Update product stock if productId exists
     if (batch.productId && batch.yield) {
       const actualQuantity = (batch.quantity * batch.yield) / 100;
-      const product = await Product.findByPk(batch.productId);
+      const product = await Product.findById(batch.productId);
       if (product) {
         product.currentStock += actualQuantity;
         product.lastRestocked = new Date();
@@ -199,7 +189,7 @@ export const completeBatch = async (req: AuthRequest, res: Response): Promise<vo
 // @access  Private (Admin, Manager, Operator)
 export const updateQualityChecks = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const batch = await Batch.findByPk(req.params.id);
+    const batch = await Batch.findById(req.params.id);
 
     if (!batch) {
       res.status(404).json({
@@ -229,7 +219,7 @@ export const updateQualityChecks = async (req: AuthRequest, res: Response): Prom
 // @access  Private (Admin)
 export const deleteBatch = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const batch = await Batch.findByPk(req.params.id);
+    const batch = await Batch.findById(req.params.id);
 
     if (!batch) {
       res.status(404).json({
@@ -239,7 +229,7 @@ export const deleteBatch = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    await batch.destroy();
+    await batch.deleteOne();
 
     res.status(200).json({
       success: true,

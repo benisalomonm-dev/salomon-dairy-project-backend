@@ -19,103 +19,102 @@ export const getDashboardStats = async (_req: AuthRequest, res: Response): Promi
     thisMonth.setHours(0, 0, 0, 0);
 
     // Total products
-    const totalProducts = await Product.count();
+    const totalProducts = await Product.countDocuments();
 
     // Low stock products
-    const lowStockProducts = await Product.count({
-      where: {
-        status: { [Op.in]: ['low', 'critical', 'out-of-stock'] },
-      },
+    const lowStockProducts = await Product.countDocuments({
+      status: { $in: ['low', 'critical', 'out-of-stock'] },
     });
 
     // Orders statistics
-    const totalOrders = await Order.count();
-    const pendingOrders = await Order.count({ where: { status: 'pending' } });
-    const todayOrders = await Order.count({
-      where: {
-        createdAt: { [Op.gte]: today },
-      },
+    const totalOrders = await Order.countDocuments();
+    const pendingOrders = await Order.countDocuments({ status: 'pending' });
+    const todayOrders = await Order.countDocuments({
+      createdAt: { $gte: today },
     });
 
     // Revenue statistics - Monthly
-    const monthlyRevenueResult = await Order.findOne({
-      where: {
-        createdAt: { [Op.gte]: thisMonth },
-        status: { [Op.ne]: 'cancelled' },
+    const monthlyRevenueResult = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: thisMonth },
+          status: { $ne: 'cancelled' },
+        },
       },
-      attributes: [[fn('SUM', col('total')), 'total']],
-      raw: true,
-    });
+      { $group: { _id: null, total: { $sum: '$total' } } },
+    ]);
 
     // Revenue statistics - Today
-    const todayRevenueResult = await Order.findOne({
-      where: {
-        createdAt: { [Op.gte]: today },
-        status: { [Op.ne]: 'cancelled' },
+    const todayRevenueResult = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: today },
+          status: { $ne: 'cancelled' },
+        },
       },
-      attributes: [[fn('SUM', col('total')), 'total']],
-      raw: true,
-    });
+      { $group: { _id: null, total: { $sum: '$total' } } },
+    ]);
 
     // Active clients
-    const activeClients = await Client.count({ where: { status: 'active' } });
+    const activeClients = await Client.countDocuments({ status: 'active' });
 
     // Active batches
-    const activeBatches = await Batch.count({ where: { status: 'in-progress' } });
+    const activeBatches = await Batch.countDocuments({ status: 'in-progress' });
 
     // Today's production (sum of completed batches today)
-    const todayProductionResult = await Batch.findOne({
-      where: {
-        createdAt: { [Op.gte]: today },
-        status: 'completed',
+    const todayProductionResult = await Batch.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: today },
+          status: 'completed',
+        },
       },
-      attributes: [[fn('SUM', col('quantity')), 'total']],
-      raw: true,
-    });
+      { $group: { _id: null, total: { $sum: '$quantity' } } },
+    ]);
 
     // Previous day's production for trend calculation
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayProductionResult = await Batch.findOne({
-      where: {
-        createdAt: { [Op.gte]: yesterday, [Op.lt]: today },
-        status: 'completed',
+    const yesterdayProductionResult = await Batch.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: yesterday, $lt: today },
+          status: 'completed',
+        },
       },
-      attributes: [[fn('SUM', col('quantity')), 'total']],
-      raw: true,
-    });
+      { $group: { _id: null, total: { $sum: '$quantity' } } },
+    ]);
 
     // Previous month's revenue for trend calculation
     const lastMonth = new Date(thisMonth);
     lastMonth.setMonth(lastMonth.getMonth() - 1);
-    const lastMonthRevenueResult = await Order.findOne({
-      where: {
-        createdAt: { [Op.gte]: lastMonth, [Op.lt]: thisMonth },
-        status: { [Op.ne]: 'cancelled' },
+    const lastMonthRevenueResult = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: lastMonth, $lt: thisMonth },
+          status: { $ne: 'cancelled' },
+        },
       },
-      attributes: [[fn('SUM', col('total')), 'total']],
-      raw: true,
-    });
+      { $group: { _id: null, total: { $sum: '$total' } } },
+    ]);
 
     // Calculate trends
-    const todayProduction = Number((todayProductionResult as any)?.total || 0);
-    const yesterdayProduction = Number((yesterdayProductionResult as any)?.total || 0);
+    const todayProduction = Number(todayProductionResult[0]?.total || 0);
+    const yesterdayProduction = Number(yesterdayProductionResult[0]?.total || 0);
     const productionTrend = yesterdayProduction > 0 
       ? ((todayProduction - yesterdayProduction) / yesterdayProduction) * 100 
       : 0;
 
-    const monthlyRevenue = Number((monthlyRevenueResult as any)?.total || 0);
-    const lastMonthRevenue = Number((lastMonthRevenueResult as any)?.total || 0);
+    const monthlyRevenue = Number(monthlyRevenueResult[0]?.total || 0);
+    const lastMonthRevenue = Number(lastMonthRevenueResult[0]?.total || 0);
     const revenueTrend = lastMonthRevenue > 0 
       ? ((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 
       : 0;
 
     // Previous day's pending orders for trend
-    const yesterdayPendingOrders = await Order.count({
-      where: {
-        createdAt: { [Op.gte]: yesterday, [Op.lt]: today },
-        status: 'pending',
-      },
+    const yesterdayPendingOrders = await Order.countDocuments({
+      createdAt: { $gte: yesterday, $lt: today },
+      status: 'pending',
     });
     const ordersTrend = yesterdayPendingOrders > 0 
       ? ((pendingOrders - yesterdayPendingOrders) / yesterdayPendingOrders) * 100 
@@ -147,7 +146,7 @@ export const getDashboardStats = async (_req: AuthRequest, res: Response): Promi
         },
         revenue: {
           monthly: Math.round(monthlyRevenue),
-          today: Math.round(Number((todayRevenueResult as any)?.total || 0)),
+          today: Math.round(Number(todayRevenueResult[0]?.total || 0)),
         },
         clients: {
           active: activeClients,
@@ -172,32 +171,23 @@ export const getDashboardStats = async (_req: AuthRequest, res: Response): Promi
 export const getSalesReport = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { startDate, endDate, groupBy = 'day' } = req.query;
-    // Convert MongoDB query operators to Sequelize
-    const whereClause: any = { status: { [Op.ne]: 'cancelled' } };
+    const query: any = { status: { $ne: 'cancelled' } };
 
     if (startDate || endDate) {
-      whereClause.createdAt = {};
+      query.createdAt = {};
       if (startDate) {
-        whereClause.createdAt[Op.gte] = new Date(startDate as string);
+        query.createdAt.$gte = new Date(startDate as string);
       }
       if (endDate) {
-        whereClause.createdAt[Op.lte] = new Date(endDate as string);
+        query.createdAt.$lte = new Date(endDate as string);
       }
     }
 
-    // Simplified reporting - get all orders and group in application logic
-    // For complex time-series, consider using raw SQL queries
-    const orders = await Order.findAll({
-      where: whereClause,
-      attributes: [
-        'id',
-        'totalAmount',
-        'createdAt',
-        'status',
-      ],
-      order: [['createdAt', 'ASC']],
-      raw: true,
-    });
+    // Get all orders
+    const orders = await Order.find(query)
+      .select('total createdAt status')
+      .sort({ createdAt: 1 })
+      .lean();
 
     // Group data based on groupBy parameter
     const groupedData = orders.reduce((acc: any, order: any) => {
@@ -223,7 +213,7 @@ export const getSalesReport = async (req: AuthRequest, res: Response): Promise<v
       }
 
       acc[key].orders += 1;
-      acc[key].revenue += parseFloat(order.totalAmount || 0);
+      acc[key].revenue += parseFloat(order.total || 0);
 
       return acc;
     }, {});
@@ -250,28 +240,26 @@ export const getProductionReport = async (req: AuthRequest, res: Response): Prom
   try {
     const { startDate, endDate, productType } = req.query;
 
-    const whereClause: any = { status: 'completed' };
+    const query: any = { status: 'completed' };
 
     if (startDate || endDate) {
-      whereClause.startTime = {};
+      query.startTime = {};
       if (startDate) {
-        whereClause.startTime[Op.gte] = new Date(startDate as string);
+        query.startTime.$gte = new Date(startDate as string);
       }
       if (endDate) {
-        whereClause.startTime[Op.lte] = new Date(endDate as string);
+        query.startTime.$lte = new Date(endDate as string);
       }
     }
 
     if (productType) {
-      whereClause.productType = productType;
+      query.productType = productType;
     }
 
     // Get all batches and group by productType
-    const batches = await Batch.findAll({
-      where: whereClause,
-      attributes: ['productType', 'quantity', 'yield'],
-      raw: true,
-    });
+    const batches = await Batch.find(query)
+      .select('productType quantity yield')
+      .lean();
 
     // Group by productType
     const groupedData = batches.reduce((acc: any, batch: any) => {
@@ -325,10 +313,9 @@ export const getProductionReport = async (req: AuthRequest, res: Response): Prom
 export const getInventoryReport = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     // Get all products
-    const products = await Product.findAll({
-      attributes: ['category', 'currentStock', 'unitPrice', 'status'],
-      raw: true,
-    });
+    const products = await Product.find()
+      .select('category currentStock unitPrice status')
+      .lean();
 
     // Group by category
     const groupedData = products.reduce((acc: any, product: any) => {
@@ -379,10 +366,9 @@ export const getInventoryReport = async (_req: AuthRequest, res: Response): Prom
 export const getClientReport = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     // Get all clients
-    const clients = await Client.findAll({
-      attributes: ['type', 'status', 'totalRevenue', 'rating'],
-      raw: true,
-    });
+    const clients = await Client.find()
+      .select('type status totalRevenue rating')
+      .lean();
 
     // Group by type
     const groupedData = clients.reduce((acc: any, client: any) => {
@@ -427,11 +413,10 @@ export const getClientReport = async (_req: AuthRequest, res: Response): Promise
       .sort((a: any, b: any) => b.totalRevenue - a.totalRevenue);
 
     // Top clients by revenue
-    const topClients = await Client.findAll({
-      attributes: ['id', 'name', 'type', 'totalRevenue', 'totalOrders', 'rating'],
-      order: [['totalRevenue', 'DESC']],
-      limit: 10,
-    });
+    const topClients = await Client.find()
+      .select('name type totalRevenue totalOrders rating')
+      .sort({ totalRevenue: -1 })
+      .limit(10);
 
     res.status(200).json({
       success: true,
@@ -455,24 +440,22 @@ export const getFinancialReport = async (req: AuthRequest, res: Response): Promi
   try {
     const { startDate, endDate } = req.query;
 
-    const whereClause: any = {};
+    const query: any = {};
 
     if (startDate || endDate) {
-      whereClause.issueDate = {};
+      query.issueDate = {};
       if (startDate) {
-        whereClause.issueDate[Op.gte] = new Date(startDate as string);
+        query.issueDate.$gte = new Date(startDate as string);
       }
       if (endDate) {
-        whereClause.issueDate[Op.lte] = new Date(endDate as string);
+        query.issueDate.$lte = new Date(endDate as string);
       }
     }
 
     // Get all invoices
-    const invoices = await Invoice.findAll({
-      where: whereClause,
-      attributes: ['status', 'total', 'issueDate'],
-      raw: true,
-    });
+    const invoices = await Invoice.find(query)
+      .select('status total issueDate')
+      .lean();
 
     // Group by status
     const statusData = invoices.reduce((acc: any, invoice: any) => {
