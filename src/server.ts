@@ -21,12 +21,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // CORS configuration MUST come before helmet for preflight requests
 // CORS configuration - allow multiple origins
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://dairy-management-frontend-production.up.railway.app',
-  process.env.FRONTEND_URL
-].filter(Boolean);
+const corsOriginsEnv = process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:5173';
+const allowedOrigins = corsOriginsEnv.split(',').map(origin => origin.trim()).filter(Boolean);
 
 console.log('🔐 CORS allowed origins:', allowedOrigins);
 
