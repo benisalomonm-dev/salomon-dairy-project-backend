@@ -151,6 +151,9 @@ export const completeBatch = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
     
+    batch.status = 'completed';
+    batch.endTime = new Date();
+    
     if (batchYield) {
       batch.yield = batchYield;
     }
